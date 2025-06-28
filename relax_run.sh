@@ -23,14 +23,18 @@ START_RES=$3
 END_RES=$4
 shift 4
 CHAINS=("$@")
+RELAX_CHAIN="${CHAINS[@]: -1}"  # Assume only one chain is being relaxed
+SUFFIX_PREFIX="chain${RELAX_CHAIN}"
 
 BASENAME=$(basename "$INPUT_PDB" .pdb)
 XML_FILE=${OUTPUT_DIR}/relax_${BASENAME}.xml
 
 mkdir -p "$OUTPUT_DIR"
 
+LOGFILE="${OUTPUT_DIR}/relax_summary.log"
+
 # === Generate Rosetta XML ===
-echo "🛠️  Generating XML for chains: ${CHAINS[*]} ($START_RES–$END_RES)"
+echo "🛠️  Generating XML for chains: ${CHAINS[*]} ($START_RES-$END_RES)"
 python3 "$XML_GEN" "${CHAINS[@]}" --start "$START_RES" --end "$END_RES" --out "$XML_FILE"
 
 # === Relax with retries ===
@@ -39,7 +43,7 @@ SUCCESS=0
 
 while [[ $ATTEMPT -le $MAX_RETRIES ]]; do
     echo "🚀 Relaxation attempt #$ATTEMPT"
-    SUFFIX="_relaxed_try${ATTEMPT}"
+    SUFFIX="_${SUFFIX_PREFIX}_relaxed_try${ATTEMPT}"
     RELAXED_PDB="${OUTPUT_DIR}/${BASENAME}${SUFFIX}_0001.pdb"
 
     $ROSETTA_BIN \
@@ -54,6 +58,8 @@ while [[ $ATTEMPT -le $MAX_RETRIES ]]; do
     echo "🔍 Checking for residual clashes..."
     if perl "$CHECK_SCRIPT" "$RELAXED_PDB" "$OUTPUT_DIR" "$CLASH_THRESHOLD"; then
         echo "✅ Clash-free structure found on attempt #$ATTEMPT: $RELAXED_PDB"
+        TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[$TIMESTAMP] input=$(basename "$INPUT_PDB")  output=$(basename "$RELAXED_PDB")  relaxed_chain=$RELAX_CHAIN  res=${START_RES}-${END_RES}  attempts=$ATTEMPT  status=OK" >> "$LOGFILE"
         SUCCESS=1
         break
     else
@@ -64,5 +70,7 @@ done
 
 if [[ $SUCCESS -eq 0 ]]; then
     echo "❌ All $MAX_RETRIES relax attempts still contain clashes. See output for diagnostics."
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$TIMESTAMP] input=$(basename "$INPUT_PDB")  output=FAILED  relaxed_chain=$RELAX_CHAIN  res=${START_RES}-${END_RES}  attempts=$MAX_RETRIES  status=FAILED" >> "$LOGFILE"
     exit 1
 fi

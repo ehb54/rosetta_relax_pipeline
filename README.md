@@ -2,21 +2,20 @@
 
 ## Incremental Rosetta Relaxation of Multichain Protein Variants
 
-This pipeline incrementally relaxes multichain protein models in which residues **87–140** of each chain are replaced. It ensures steric clashes are resolved in each chain before progressively reintroducing additional chains.
+This pipeline incrementally relaxes multichain protein models in which residues **87–140** of each chain are replaced. It ensures steric clashes are resolved one chain at a time, preserving structure integrity.
 
 ---
 
 ## 🚀 Overview
 
-**Goal:** Generate a single, clash-free, physically plausible structure by relaxing only the modified region of each chain (residues 87–140) while keeping the rest (1–86) fixed.
+**Goal:** Generate a single, clash-free, physically plausible structure by relaxing only the modified region of each chain (residues 87–140), one chain at a time.
 
 **Strategy:**
 1. Start with all chains (A–E), each 1–140 residues.
-2. Remove residues 87–140 from chains C–E.
-3. Relax variant region in chains A and B using Rosetta.
-4. Check for steric clashes (`fa_rep`) after relaxation.
-5. If clash-free, reintroduce the next chain’s variant region and repeat.
-6. Continue until all chains are reattached and relaxed.
+2. Assume chain **A** is always fixed and correct.
+3. Add one chain at a time (B → E), and relax only residues 87–140 of the newly added chain.
+4. Check for steric clashes (`fa_rep`) after each relaxation step.
+5. If clash-free, reintroduce the next chain and repeat.
 
 ---
 
@@ -28,11 +27,12 @@ relax_pipeline/
 ├── prepare_phase.pl             # Cuts residues 87–140 from selected chains
 ├── reassemble_phase.pl          # Reattaches residues from original structure
 ├── check_clashes.pl             # Scores relaxed output and reports fa_rep clashes
-├── relax_run.sh                 # Runs full relax + clash check with retries
+├── relax_run.sh                 # Runs relax + clash check with retries & logging
+├── run_all_phases.sh            # NEW: Wrapper for all relaxation phases
 ├── input/                       # Full original PDB(s)
 │   └── input.pdb
-├── variants/                    # Working phase inputs (e.g. AB_variant.pdb)
-├── output/                      # Relaxed outputs and diagnostics
+├── variants/                    # Intermediate variant PDBs (AB, ABC, etc.)
+├── output/                      # Relaxed outputs and logs per phase
 └── xml/                         # Auto-generated relax XML files
 ```
 
@@ -42,66 +42,71 @@ relax_pipeline/
 
 - [Rosetta](https://www.rosettacommons.org/) (academic license required)
 - Perl, Python 3, Bash
-- `score_jd2.default.linuxgccrelease` and `rosetta_scripts.default.linuxgccrelease` built and in `~/rosetta/source/bin/`
+- `score_jd2.default.linuxgccrelease` and `rosetta_scripts.default.linuxgccrelease` built and in your path
 
 ---
 
-## 🧪 Example Workflow
+## 🧪 Example Workflow (Manual)
 
-### 1. Prepare first phase input (relax chains A+B)
+### 1. Prepare the first phase input (chains A+B)
 ```bash
 perl prepare_phase.pl input/input.pdb variants/AB_variant.pdb "A B" "C D E" 87 140
 ```
 
-### 2. Relax and check for clashes
+### 2. Relax chain B only
 ```bash
 ./relax_run.sh variants/AB_variant.pdb output/AB 87 140 A B
 ```
 
-- If clashes are found (`fa_rep > 10`), up to 3 relax attempts are tried.
-- Reports and PyMOL selection files are saved.
-
-### 3. Reassemble with next chain (e.g. C)
+### 3. Reassemble with chain C and relax C only
 ```bash
-perl reassemble_phase.pl input/input.pdb output/AB/AB_variant_relaxed_try1_0001.pdb "C" 87 140 variants/ABC_variant.pdb
-```
-
-### 4. Repeat
-```bash
+perl reassemble_phase.pl input/input.pdb output/AB/AB_variant_chainB_relaxed_try1_0001.pdb "C" 87 140 variants/ABC_variant.pdb
 ./relax_run.sh variants/ABC_variant.pdb output/ABC 87 140 A B C
 ```
 
----
-
-## 📊 Clash Checking & Output
-
-- `check_clashes.pl` uses Rosetta `score_jd2` to extract per-residue `fa_rep`
-- Any residue above a configurable threshold (default: 10) is flagged
-- Output:
-  - `residue_energies.txt` — tabular list of fa_rep outliers
-  - `clash_selection.pml` — PyMOL selection script
-  - Retried structures with suffixes like `_relaxed_try2_0001.pdb`
+### 4. Repeat for D, then E...
 
 ---
 
-## 🔄 Environment Variables
+## 🤖 Automated Workflow
 
-You can override defaults via environment variables:
-
+Run all phases in sequence (assumes input.pdb has chains A–E):
 ```bash
-CLASH_THRESHOLD=12 MAX_RETRIES=5 ./relax_run.sh ...
+./run_all_phases.sh
+```
+
+This automates:
+- Variant construction
+- Relaxation with retries
+- Clash detection
+- Reassembly
+
+---
+
+## 📊 Clash Checking & Logging
+
+Each relaxation run:
+- Scores output with Rosetta
+- Flags residues with `fa_rep > 10`
+- Logs attempt status and relaxed structure to `relax_summary.log`
+
+Example log:
+```
+[2025-06-27 15:01:42] input=ABC_variant.pdb  output=ABC_variant_chainC_relaxed_try1_0001.pdb  relaxed_chain=C  res=87-140  attempts=1  status=OK
 ```
 
 ---
 
-## 🧠 Why Incremental Relaxation?
+## 🧠 Why Incremental?
 
-- Prevents structural distortion by resolving clashes chain-by-chain
-- Enables selective backbone mobility in modified regions only
-- Ensures clean, reproducible integration of variant segments
+- Prevents propagating distortion
+- Minimizes unnecessary flexibility
+- Pinpoints structural issues chain-by-chain
+- Makes debugging and validation easy
 
 ---
 
 ## 📬 Questions?
 
-Feel free to open an issue or reach out for clarification on adapting the pipeline for different chain counts, residue ranges, or constraints.
+Open an issue or contact the authors for help adapting the pipeline to other multimeric systems, alternate residue ranges, or constraints.
+
