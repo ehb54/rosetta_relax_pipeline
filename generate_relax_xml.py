@@ -2,7 +2,8 @@
 import argparse
 
 def generate_relax_xml(chains, res_start, res_end, output_file):
-    chain_str = ",".join(chains)
+    all_chain_str = ",".join(chains)
+    relax_chain = chains[-1]
     res_range = f"{res_start}-{res_end}"
 
     xml = f"""<ROSETTASCRIPTS>
@@ -11,9 +12,10 @@ def generate_relax_xml(chains, res_start, res_end, output_file):
   </SCOREFXNS>
 
   <RESIDUE_SELECTORS>
-    <Chain name="selected_chains" chains="{chain_str}"/>
+    <Chain name="all_chains" chains="{all_chain_str}"/>
+    <Chain name="relax_chain" chains="{relax_chain}"/>
     <Index name="relax_range" resnums="{res_range}"/>
-    <And name="target_relax" selectors="selected_chains,relax_range"/>
+    <And name="target_relax" selectors="relax_chain,relax_range"/>
   </RESIDUE_SELECTORS>
 
   <TASKOPERATIONS>
@@ -24,26 +26,27 @@ def generate_relax_xml(chains, res_start, res_end, output_file):
 
   <MOVERS>
     <FastRelax name="relax" scorefxn="relaxfxn" task_operations="repack_target"/>
+    <ScoreMover name="score" scorefxn="relaxfxn" />
   </MOVERS>
 
   <PROTOCOLS>
     <Add mover="relax"/>
+    <Add mover="score"/>
   </PROTOCOLS>
+
 </ROSETTASCRIPTS>
 """
-
     with open(output_file, "w") as f:
         f.write(xml)
-    print(f"✅ Wrote {output_file} for chains {chain_str}, residues {res_range}")
+    print(f"✅ Wrote {output_file} relaxing chain {relax_chain} in range {res_range} (others fixed: {', '.join(chains[:-1])})")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate RosettaScripts XML for selective relax.")
-    parser.add_argument("chains", nargs="+", help="Chains to relax (e.g. A B C)")
+    parser = argparse.ArgumentParser(description="Generate RosettaScripts XML for relaxing part of a structure.")
+    parser.add_argument("chains", nargs="+", help="Chains involved (relaxes last one only)")
     parser.add_argument("--start", type=int, required=True, help="Start residue number")
     parser.add_argument("--end", type=int, required=True, help="End residue number")
     parser.add_argument("--out", type=str, default="relax.xml", help="Output XML filename")
 
     args = parser.parse_args()
     generate_relax_xml(args.chains, args.start, args.end, args.out)
-

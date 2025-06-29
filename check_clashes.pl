@@ -14,7 +14,7 @@ my $resfile = "$outdir/residue_energies.txt";
 my $pymol_file = "$outdir/clash_selection.pml";
 
 # Run Rosetta scoring
-system("$score_bin -s $pdb -score:per_residue_energies true -out:file:scorefile $outdir/score.sc > /dev/null");
+system("$score_bin -s $pdb -out:file:scorefile $outdir/score.sc > /dev/null");
 
 # Extract per-residue energy file
 (my $basename = $pdb) =~ s{.*/}{};

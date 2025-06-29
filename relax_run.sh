@@ -39,31 +39,44 @@ python3 "$XML_GEN" "${CHAINS[@]}" --start "$START_RES" --end "$END_RES" --out "$
 
 # === Relax with retries ===
 ATTEMPT=1
+TOTAL_TIME=0
 SUCCESS=0
 
 while [[ $ATTEMPT -le $MAX_RETRIES ]]; do
     echo "🚀 Relaxation attempt #$ATTEMPT"
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$TIMESTAMP] START: input=$(basename "$INPUT_PDB")  chain=$RELAX_CHAIN  res=${START_RES}-${END_RES}  attempt=$ATTEMPT" >> "$LOGFILE"
+    
     SUFFIX="_${SUFFIX_PREFIX}_relaxed_try${ATTEMPT}"
     RELAXED_PDB="${OUTPUT_DIR}/${BASENAME}${SUFFIX}_0001.pdb"
+
+    START_TIME=$(date +%s)
 
     $ROSETTA_BIN \
         -s "$INPUT_PDB" \
         -parser:protocol "$XML_FILE" \
         -relax:constrain_relax_to_start_coords \
         -relax:coord_constrain_sidechains \
+        -overwrite \
         -nstruct 1 \
         -out:suffix "$SUFFIX" \
         -out:path:all "$OUTPUT_DIR"
+
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+    TOTAL_TIME=$((TOTAL_TIME + DURATION))
+    AVG_TIME=$((TOTAL_TIME / ATTEMPT))
+    REMAINING_TIME=$(( (MAX_RETRIES - ATTEMPT) * AVG_TIME ))
 
     echo "🔍 Checking for residual clashes..."
     if perl "$CHECK_SCRIPT" "$RELAXED_PDB" "$OUTPUT_DIR" "$CLASH_THRESHOLD"; then
         echo "✅ Clash-free structure found on attempt #$ATTEMPT: $RELAXED_PDB"
         TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-        echo "[$TIMESTAMP] input=$(basename "$INPUT_PDB")  output=$(basename "$RELAXED_PDB")  relaxed_chain=$RELAX_CHAIN  res=${START_RES}-${END_RES}  attempts=$ATTEMPT  status=OK" >> "$LOGFILE"
+        echo "[$TIMESTAMP] input=$(basename "$INPUT_PDB")  output=$(basename "$RELAXED_PDB")  relaxed_chain=$RELAX_CHAIN  res=${START_RES}-${END_RES}  attempts=$ATTEMPT  status=OK  duration=${DURATION}s" >> "$LOGFILE"
         SUCCESS=1
         break
     else
-        echo "⚠️  Clashes detected on attempt #$ATTEMPT. Retrying..."
+        echo "⚠️  Clashes detected on attempt #$ATTEMPT. Retrying... (duration=${DURATION}s, est_remaining=${REMAINING_TIME}s)"
         ((ATTEMPT++))
     fi
 done
