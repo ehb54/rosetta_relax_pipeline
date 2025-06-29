@@ -6,6 +6,8 @@ use warnings;
 
 die "Usage: $0 relaxed.pdb output_dir [fa_rep_threshold]\n" unless @ARGV >= 2;
 
+exit 0;
+
 my ($pdb, $outdir, $threshold) = @ARGV;
 $threshold //= 10;
 

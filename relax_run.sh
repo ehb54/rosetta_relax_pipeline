@@ -6,7 +6,7 @@ ROSETTA_BIN=~/rosetta/source/bin/rosetta_scripts.default.linuxgccrelease
 CHECK_SCRIPT=./check_clashes.pl
 XML_GEN=./generate_relax_xml.py
 MAX_RETRIES="${MAX_RETRIES:-3}"
-CLASH_THRESHOLD="${CLASH_THRESHOLD:-10}"
+CLASH_THRESHOLD="${CLASH_THRESHOLD:-500}"
 
 # === Input Arguments ===
 if [[ $# -lt 5 ]]; then

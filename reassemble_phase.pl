@@ -30,4 +30,4 @@ while (<$in_orig>) {
 close $in_orig;
 close $out;
 
-print "✅ Reassembled PDB with chains @{$add_chains}: $output\n";
+print "✅ Reassembled PDB with chains $add_chains: $output\n";
